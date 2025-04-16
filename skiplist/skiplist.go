@@ -287,7 +287,7 @@ func (sl *SkipList) Set(key Key, value interface{}) {
 		// Check if we're updating an existing key
 		if next != nil && next.key.Equal(key) {
 			next.value.Store(value)
-				// Release hazard pointers
+			// Release hazard pointers
 			hpSystem.Release(0) // From findPredecessors
 			hpSystem.Release(hpNextIdx)
 			return
@@ -798,10 +798,10 @@ func (sl *SkipList) StartTTLCleanupRoutine(interval time.Duration) (cancel func(
 
 // BatchOperation represents a batch of operations to be performed atomically
 type BatchOperation struct {
-	Key       Key
-	Value     interface{}
-	TTL       int64 // 0 means no TTL
-	IsDelete  bool
+	Key      Key
+	Value    interface{}
+	TTL      int64 // 0 means no TTL
+	IsDelete bool
 }
 
 // ExecuteBatch executes a batch of operations with optimistic concurrency control

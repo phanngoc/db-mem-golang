@@ -163,7 +163,7 @@ func (db *Database) GetCollection(name string) (*Collection, error) {
 	defer db.mu.RUnlock()
 
 	col, exists := db.collections[name]
-	if (!exists) {
+	if !exists {
 		return nil, ErrCollectionNotFound
 	}
 
@@ -584,7 +584,7 @@ func (tx *Transaction) Commit() error {
 
 	// Execute batch operations on main data
 	success := tx.col.data.ExecuteBatch(tx.ops)
-	if (!success) {
+	if !success {
 		tx.aborted = true
 		return ErrTransactionAborted
 	}
