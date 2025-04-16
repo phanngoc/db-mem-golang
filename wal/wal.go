@@ -396,9 +396,9 @@ func (w *WAL) recoverFile(path string, handler func(entry *Entry) error) error {
 			return fmt.Errorf("failed to read WAL entry data: %w", err)
 		}
 
-		// Decode entry
+		// Decode entry - using bytes.NewReader to create an io.Reader
 		var entry Entry
-		decoder := gob.NewDecoder(entryBuf)
+		decoder := gob.NewDecoder(bytes.NewReader(entryBuf))
 		if err := decoder.Decode(&entry); err != nil {
 			return fmt.Errorf("failed to decode WAL entry: %w", err)
 		}
