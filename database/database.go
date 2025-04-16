@@ -783,7 +783,7 @@ func (db *Database) recoverFromWAL() error {
 
 			// Decode the key
 			keyBytes := entry.Key
-			var key interface{}
+			var keyValue interface{}
 			var k skiplist.Key
 
 			// Try to recover the key based on first byte (simple type detection)
@@ -792,23 +792,22 @@ func (db *Database) recoverFromWAL() error {
 				case 'i': // int
 					var intKey int
 					if err := binary.Read(bytes.NewReader(keyBytes[1:]), binary.BigEndian, &intKey); err == nil {
-						key = intKey
+						keyValue = intKey
 					}
 				case 's': // string
-					key = string(keyBytes[1:])
+					keyValue = string(keyBytes[1:])
 				default: // fallback to bytes
-					key = keyBytes
+					keyValue = keyBytes
 				}
 			}
 
 			// Skip if we couldn't recover the key
-			if key == nil {
+			if keyValue == nil {
 				return nil
 			}
 
 			// Create a key from the recovered value
-			var err error
-			k, err = skiplist.NewKey(key)
+			k, err = skiplist.NewKey(keyValue)
 			if err != nil {
 				return err
 			}
@@ -836,12 +835,32 @@ func (db *Database) recoverFromWAL() error {
 				return nil
 			}
 
-			// Decode the key (similar to above)
-			// ... key decoding logic ...
-			// Skip for brevity
+			// Decode the key
+			keyBytes := entry.Key
+			var keyValue interface{}
+
+			// Try to recover the key based on first byte (simple type detection)
+			if len(keyBytes) > 0 {
+				switch keyBytes[0] {
+				case 'i': // int
+					var intKey int
+					if err := binary.Read(bytes.NewReader(keyBytes[1:]), binary.BigEndian, &intKey); err == nil {
+						keyValue = intKey
+					}
+				case 's': // string
+					keyValue = string(keyBytes[1:])
+				default: // fallback to bytes
+					keyValue = keyBytes
+				}
+			}
+
+			// Skip if we couldn't recover the key
+			if keyValue == nil {
+				return nil
+			}
 
 			// Delete from the collection
-			col.Delete(key)
+			col.Delete(keyValue)
 
 		case wal.OpClear:
 			// Try to find the collection

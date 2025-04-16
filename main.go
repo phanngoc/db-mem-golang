@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/gob"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -18,6 +19,11 @@ type Person struct {
 	Email     string
 	Age       int
 	CreatedAt time.Time
+}
+
+func init() {
+	// Register types for gob encoding/decoding
+	gob.Register(Person{})
 }
 
 func main() {

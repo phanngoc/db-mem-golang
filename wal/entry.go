@@ -92,3 +92,10 @@ func (e *Entry) DecodeValue(result interface{}) error {
 	decoder := gob.NewDecoder(bytes.NewReader(e.Value))
 	return decoder.Decode(result)
 }
+
+// GetValueAsInterface returns the value as an empty interface
+func (e *Entry) GetValueAsInterface() (interface{}, error) {
+	var value interface{}
+	err := gob.NewDecoder(bytes.NewReader(e.Value)).Decode(&value)
+	return value, err
+}

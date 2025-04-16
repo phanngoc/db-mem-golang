@@ -4,6 +4,7 @@ package wal
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"encoding/gob"
 	"errors"
@@ -182,12 +183,12 @@ func (w *WAL) Write(entry *Entry) error {
 	// Serialize the entry
 	var entryBuf []byte
 	{
-		var buf []byte
+		var buf bytes.Buffer
 		enc := gob.NewEncoder(&buf)
 		if err := enc.Encode(entry); err != nil {
 			return fmt.Errorf("failed to encode WAL entry: %w", err)
 		}
-		entryBuf = buf
+		entryBuf = buf.Bytes()
 	}
 
 	// Prepare header (size of entry)
@@ -251,7 +252,7 @@ func (w *WAL) rotate() error {
 	checkpointEntry := NewCheckpointEntry()
 	checkpointEntry.Sequence = atomic.AddUint64(&w.sequence, 1)
 
-	var buf []byte
+	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(checkpointEntry); err != nil {
 		return fmt.Errorf("failed to encode checkpoint entry: %w", err)
@@ -259,7 +260,7 @@ func (w *WAL) rotate() error {
 
 	// Write header (entry size)
 	header := make([]byte, EntryHeaderSize)
-	binary.BigEndian.PutUint64(header, uint64(len(buf)))
+	binary.BigEndian.PutUint64(header, uint64(buf.Len()))
 
 	n, err := w.writer.Write(header)
 	if err != nil {
@@ -268,7 +269,7 @@ func (w *WAL) rotate() error {
 	w.size += int64(n)
 
 	// Write entry
-	n, err = w.writer.Write(buf)
+	n, err = w.writer.Write(buf.Bytes())
 	if err != nil {
 		return fmt.Errorf("failed to write checkpoint entry: %w", err)
 	}
