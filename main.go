@@ -73,87 +73,13 @@ func main() {
 		database.WithRecovery(true),
 	)
 
-	// Create a collection for storing people
-	peopleCollection, err := dbInstance.CreateCollection("people")
-	if err != nil {
-		fmt.Printf("Error creating collection: %v\n", err)
-		// Collection might already exist and be recovered from WAL
-		// Try to get the existing collection
-		existingCollections := dbInstance.ListCollections()
-		for _, colName := range existingCollections {
-			if colName == "people" {
-				peopleCollection, _ = dbInstance.GetCollection("people")
-				fmt.Println("Using existing 'people' collection")
-				break
-			}
-		}
-
-		// If we still don't have a collection, we can't proceed
-		if peopleCollection == nil {
-			fmt.Println("Failed to create or retrieve 'people' collection, cannot proceed")
-			return
-		}
-	}
-
-	collections["people"] = peopleCollection
-	indexes["people"] = make(map[string]*database.Index)
-
-	// Create indexes for efficient querying only if we have a valid collection
-	if peopleCollection != nil {
-		nameIndex, err := createNameIndex(peopleCollection)
-		if err == nil {
-			indexes["people"]["name"] = nameIndex
-		}
-
-		ageIndex, err := createAgeIndex(peopleCollection)
-		if err == nil {
-			indexes["people"]["age"] = ageIndex
-		}
-
-		// Add some sample data
-		addSamplePeople(peopleCollection)
-	}
-
 	// Set up improved HTTP API
 	setupHTTPAPI()
-
 	// Set up clean shutdown
 	setupGracefulShutdown()
 
 	// Wait forever (server runs in a goroutine)
 	select {}
-}
-
-func createNameIndex(people *database.Collection) (*database.Index, error) {
-	nameIndex, err := people.CreateIndex("name_idx", func(val interface{}) (skiplist.Key, error) {
-		if person, ok := val.(Person); ok {
-			return skiplist.NewKey(person.Name)
-		}
-		return skiplist.Key{}, fmt.Errorf("invalid type for name index")
-	})
-
-	if err != nil {
-		fmt.Printf("Error creating name index: %v\n", err)
-		return nil, err
-	}
-
-	return nameIndex, nil
-}
-
-func createAgeIndex(people *database.Collection) (*database.Index, error) {
-	ageIndex, err := people.CreateIndex("age_idx", func(val interface{}) (skiplist.Key, error) {
-		if person, ok := val.(Person); ok {
-			return skiplist.NewKey(person.Age)
-		}
-		return skiplist.Key{}, fmt.Errorf("invalid type for age index")
-	})
-
-	if err != nil {
-		fmt.Printf("Error creating age index: %v\n", err)
-		return nil, err
-	}
-
-	return ageIndex, nil
 }
 
 // setupGracefulShutdown ensures the database is properly closed on shutdown
@@ -802,23 +728,6 @@ func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 		Success: false,
 		Message: message,
 	})
-}
-
-// addSamplePeople adds some test data to the collection
-func addSamplePeople(people *database.Collection) {
-	samplePeople := []Person{
-		{ID: 42, Name: "Alice", Email: "alice@example.com", Age: 28, CreatedAt: time.Now()},
-		{ID: 43, Name: "Bob", Email: "bob@example.com", Age: 32, CreatedAt: time.Now()},
-		{ID: 44, Name: "Charlie", Email: "charlie@example.com", Age: 24, CreatedAt: time.Now()},
-		{ID: 45, Name: "Diana", Email: "diana@example.com", Age: 35, CreatedAt: time.Now()},
-		{ID: 46, Name: "Evan", Email: "evan@example.com", Age: 29, CreatedAt: time.Now()},
-	}
-
-	for _, person := range samplePeople {
-		people.Set(person.ID, person)
-	}
-
-	fmt.Printf("Added %d sample people to the database\n", len(samplePeople))
 }
 
 // runConcurrentBenchmark tests the performance under high concurrency
