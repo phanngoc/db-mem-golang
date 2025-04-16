@@ -23,6 +23,18 @@ const (
 	OpCheckpoint
 )
 
+// CollectionOperationType defines operations specific to collections
+type CollectionOperationType byte
+
+const (
+	// OpCollectionCreate represents a collection creation
+	OpCollectionCreate CollectionOperationType = iota
+	// OpCollectionDrop represents a collection deletion
+	OpCollectionDrop
+	// OpCollectionConfig represents a collection configuration change
+	OpCollectionConfig
+)
+
 // Entry represents a single WAL log entry
 type Entry struct {
 	// Sequence number to maintain order
@@ -33,12 +45,16 @@ type Entry struct {
 	Collection string
 	// Type of operation (set, delete, etc.)
 	Type OperationType
+	// For collection-specific operations
+	CollectionOp CollectionOperationType
 	// Key for the operation
 	Key []byte
 	// Value for set operations
 	Value []byte
 	// TTL in seconds (0 means no TTL)
 	TTL int64
+	// Metadata for collection operations (JSON-encoded)
+	Metadata []byte
 }
 
 // NewSetEntry creates a log entry for a set operation
@@ -87,9 +103,61 @@ func NewCheckpointEntry() *Entry {
 	}
 }
 
+// NewCreateCollectionEntry creates a log entry for a collection creation
+func NewCreateCollectionEntry(name string, config interface{}) (*Entry, error) {
+	// Serialize the collection configuration
+	var configBuf bytes.Buffer
+	encoder := gob.NewEncoder(&configBuf)
+	if err := encoder.Encode(config); err != nil {
+		return nil, err
+	}
+
+	return &Entry{
+		Timestamp:    time.Now().UnixNano(),
+		Collection:   name,
+		Type:         OpCheckpoint, // Use checkpoint type as it's a system operation
+		CollectionOp: OpCollectionCreate,
+		Metadata:     configBuf.Bytes(),
+	}, nil
+}
+
+// NewDropCollectionEntry creates a log entry for a collection drop
+func NewDropCollectionEntry(name string) *Entry {
+	return &Entry{
+		Timestamp:    time.Now().UnixNano(),
+		Collection:   name,
+		Type:         OpCheckpoint, // Use checkpoint type as it's a system operation
+		CollectionOp: OpCollectionDrop,
+	}
+}
+
+// NewUpdateCollectionConfigEntry creates a log entry for a collection config update
+func NewUpdateCollectionConfigEntry(name string, config interface{}) (*Entry, error) {
+	// Serialize the collection configuration
+	var configBuf bytes.Buffer
+	encoder := gob.NewEncoder(&configBuf)
+	if err := encoder.Encode(config); err != nil {
+		return nil, err
+	}
+
+	return &Entry{
+		Timestamp:    time.Now().UnixNano(),
+		Collection:   name,
+		Type:         OpCheckpoint, // Use checkpoint type as it's a system operation
+		CollectionOp: OpCollectionConfig,
+		Metadata:     configBuf.Bytes(),
+	}, nil
+}
+
 // DecodeValue decodes the value from a log entry
 func (e *Entry) DecodeValue(result interface{}) error {
 	decoder := gob.NewDecoder(bytes.NewReader(e.Value))
+	return decoder.Decode(result)
+}
+
+// DecodeMetadata decodes the metadata from a log entry
+func (e *Entry) DecodeMetadata(result interface{}) error {
+	decoder := gob.NewDecoder(bytes.NewReader(e.Metadata))
 	return decoder.Decode(result)
 }
 
@@ -97,5 +165,12 @@ func (e *Entry) DecodeValue(result interface{}) error {
 func (e *Entry) GetValueAsInterface() (interface{}, error) {
 	var value interface{}
 	err := gob.NewDecoder(bytes.NewReader(e.Value)).Decode(&value)
+	return value, err
+}
+
+// GetMetadataAsInterface returns the metadata as an empty interface
+func (e *Entry) GetMetadataAsInterface() (interface{}, error) {
+	var value interface{}
+	err := gob.NewDecoder(bytes.NewReader(e.Metadata)).Decode(&value)
 	return value, err
 }
