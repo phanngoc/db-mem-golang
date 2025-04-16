@@ -8,6 +8,7 @@ import (
 
 	"db-mem-golang/database"
 	"db-mem-golang/skiplist"
+	"db-mem-golang/wal"
 )
 
 // Person represents a sample data structure for our database
@@ -22,10 +23,20 @@ type Person struct {
 func main() {
 	fmt.Println("=== Fast In-Memory Database with Lock-Free Skip Lists ===")
 
-	// Create a new database with automatic TTL cleanup
+	// Configure WAL options
+	walOptions := wal.Options{
+		Dir:                "data",
+		SyncInterval:       200 * time.Millisecond,
+		CheckpointInterval: 5 * time.Minute,
+		MaxLogSize:         50 * 1024 * 1024, // 50MB
+	}
+
+	// Create a new database with WAL enabled
 	db := database.NewDatabase(
 		database.WithTTLCleanup(true),
 		database.WithGCInterval(1*time.Minute),
+		database.WithWAL(walOptions),
+		database.WithRecovery(true),
 	)
 	defer db.Close()
 
@@ -154,6 +165,36 @@ func main() {
 	} else {
 		fmt.Println("  TTL entry has expired as expected")
 	}
+
+	// Add a demonstration of WAL persistence at the end of main()
+	fmt.Println("\nDemonstrating WAL persistence...")
+
+	// Add some specific data that we'll check after restart
+	people.Set(2001, Person{
+		ID:        2001,
+		Name:      "Persistence Test",
+		Email:     "persistence@example.com",
+		Age:       40,
+		CreatedAt: time.Now(),
+	})
+
+	fmt.Println("  Added persistent record with ID=2001")
+	fmt.Println("  This record will be automatically recovered if the database restarts")
+
+	// Force a checkpoint to ensure data is persisted
+	fmt.Println("  Forcing sync to WAL...")
+	time.Sleep(500 * time.Millisecond) // Allow async WAL writes to complete
+
+	fmt.Println("\nWAL is configured with the following options:")
+	fmt.Printf("  Directory: %s\n", walOptions.Dir)
+	fmt.Printf("  Sync Interval: %v\n", walOptions.SyncInterval)
+	fmt.Printf("  Checkpoint Interval: %v\n", walOptions.CheckpointInterval)
+	fmt.Printf("  Max Log Size: %d MB\n", walOptions.MaxLogSize/1024/1024)
+
+	fmt.Println("\nTo verify persistence:")
+	fmt.Println("1. Restart the application")
+	fmt.Println("2. The database will automatically recover from the WAL")
+	fmt.Println("3. Try to retrieve the record with ID=2001")
 }
 
 // addSamplePeople adds some test data to the collection

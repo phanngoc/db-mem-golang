@@ -435,10 +435,18 @@ func (col *Collection) Clear() {
 
 	// Clear all indexes
 	col.indexMu.RLock()
-	defer col.indexMu.RUnlock()
-
 	for _, idx := range col.indexes {
 		idx.data.Clear()
+	}
+	col.indexMu.RUnlock()
+
+	// Log to WAL if enabled
+	if col.db != nil && col.db.walEnabled && col.db.walLogger != nil {
+		entry := wal.NewClearEntry(col.name)
+		if err := col.db.walLogger.Write(entry); err != nil {
+			// Log the error but don't fail the operation
+			fmt.Printf("Warning: Failed to write clear operation to WAL: %v\n", err)
+		}
 	}
 }
 

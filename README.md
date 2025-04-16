@@ -1,153 +1,91 @@
-# MemDB: High-Performance In-Memory Database with Lock-Free Skip Lists
+# Fast In-Memory Database with WAL Persistence
 
-MemDB is a high-performance in-memory database built on lock-free skip lists, designed for concurrent environments where throughput and scalability are critical. By leveraging atomic operations instead of traditional locks, MemDB achieves exceptional performance even under heavy concurrency.
+This project implements a high-performance in-memory database with lock-free skip lists and Write-Ahead Log (WAL) persistence.
 
 ## Features
 
-- **Lock-Free Architecture**: Uses atomic operations and Compare-And-Swap (CAS) instead of locks
-- **Hazard Pointer Memory Management**: Safe memory reclamation for concurrent access
-- **Persistent Skip List Structure**: Optimized for in-memory access patterns
-- **Rich Query Capabilities**:
-  - Key-value access
-  - Range queries
-  - Secondary indexes
-- **Data Management**:
-  - Time-To-Live (TTL) with automatic cleanup
-  - Batch operations
-  - Transaction support
-- **Performance**:
-  - Scales exceptionally well across multiple CPU cores
-  - Achieves 900,000+ operations per second on standard hardware
+- **Lock-Free Skip Lists**: High-performance concurrent data structure for in-memory storage
+- **Write-Ahead Log (WAL)**: Persistence mechanism to recover data after restarts
+- **Secondary Indexes**: Create and query data through secondary indexes
+- **TTL Support**: Automatic expiration of data items
+- **Transactions**: Batch multiple operations together
 
-## Architecture
+## WAL Implementation
 
-MemDB is built on two main components:
+The Write-Ahead Log (WAL) provides persistence for our in-memory database by recording all write operations before they are applied to the database. This ensures that in case of system failure or restart, all committed data can be recovered.
 
-1. **Skip List Core** (`skiplist` package):
-   - Lock-free implementation with atomic operations
-   - Hazard pointers for safe memory reclamation
-   - Support for multiple key types (int, int64, string, []byte)
-   - TTL support with efficient cleanup
+### Key Features of the WAL
 
-2. **Database Layer** (`database` package):
-   - Collections (similar to tables)
-   - Secondary indexes
-   - Transaction management
-   - Statistics tracking
+1. **Durability**: Every write operation is recorded in the log before it's applied
+2. **Atomicity**: Transaction support ensures operations are all applied or none
+3. **Recovery**: Automatic recovery rebuilds database state from the log on startup
+4. **Checkpoints**: Periodic checkpoints mark consistent states in the log
+5. **Log Rotation**: Automatically rotates logs to prevent unbounded growth
 
-## Installation
+## How to Use
+
+### Enabling WAL
+
+To enable WAL for your database:
+
+```go
+walOptions := wal.Options{
+    Dir:                "data",               // Directory for log files
+    SyncInterval:       200 * time.Millisecond, // How often to sync to disk
+    CheckpointInterval: 5 * time.Minute,      // How often to create checkpoints
+    MaxLogSize:         50 * 1024 * 1024,     // Max log size before rotation
+}
+
+db := database.NewDatabase(
+    database.WithWAL(walOptions),         // Enable WAL
+    database.WithRecovery(true),          // Enable recovery at startup
+    database.WithTTLCleanup(true),        // Optional: enable TTL cleanup
+)
+```
+
+### Testing Persistence
+
+A test script is included to demonstrate persistence across restarts:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/memdb.git
-
-# Build the project
-cd memdb
-go build -o memdb-app
+./test_persistence.sh
 ```
 
-## Usage
+This script:
+1. Runs the database, creating some data and recording it in the WAL
+2. Restarts the database, which should recover the data from the WAL
+3. Shows that data persists across restarts
 
-### Basic Usage
+## Data Model
 
-```go
-package main
-
-import (
-    "fmt"
-    "time"
-    "db-mem-golang/database"
-)
-
-func main() {
-    // Create a new database
-    db := database.NewDatabase(
-        database.WithTTLCleanup(true),
-        database.WithGCInterval(1*time.Minute),
-    )
-    defer db.Close()
-    
-    // Create a collection (similar to a table)
-    users, err := db.CreateCollection("users")
-    if err != nil {
-        panic(err)
-    }
-    
-    // Insert data
-    users.Set("user1", map[string]interface{}{
-        "name": "Alice",
-        "email": "alice@example.com",
-        "age": 28,
-    })
-    
-    // Retrieve data
-    userData, found := users.Get("user1")
-    if found {
-        fmt.Println("Found user:", userData)
-    }
-    
-    // Set with expiration (TTL)
-    users.SetWithTTL("temp_user", map[string]interface{}{
-        "name": "Temporary",
-        "role": "guest",
-    }, 3600) // expires in 1 hour
-}
-```
-
-### Creating Indexes
+The database uses a collections-based model, similar to NoSQL databases:
 
 ```go
-// Create an index on the "name" field
-nameIndex, err := users.CreateIndex("name_idx", func(val interface{}) (skiplist.Key, error) {
-    if user, ok := val.(map[string]interface{}); ok {
-        if name, ok := user["name"].(string); ok {
-            return skiplist.NewKey(name)
-        }
+// Create a collection
+people, err := db.CreateCollection("people")
+
+// Add data
+people.Set(42, Person{ID: 42, Name: "Alice", Age: 28})
+
+// Retrieve data
+val, found := people.Get(42)
+person := val.(Person)
+
+// Create indexes
+nameIndex, err := people.CreateIndex("name_idx", func(val interface{}) (skiplist.Key, error) {
+    if person, ok := val.(Person); ok {
+        return skiplist.NewKey(person.Name)
     }
-    return skiplist.Key{}, fmt.Errorf("invalid user data for name index")
+    return skiplist.Key{}, fmt.Errorf("invalid type")
 })
 
-// Query using the index
+// Query by index
 results, err := nameIndex.Query("Alice")
-if err == nil && len(results) > 0 {
-    fmt.Println("Found users with name Alice:", results)
-}
-
-// Range query on an age index
-youngUsers, err := ageIndex.RangeQuery(18, 30)
-if err == nil {
-    fmt.Println("Found young users:", youngUsers)
-}
-```
-
-### Transactions
-
-```go
-// Start a transaction
-tx := users.NewTransaction()
-
-// Add operations to the transaction
-tx.Set("user2", map[string]interface{}{"name": "Bob", "age": 32})
-tx.Set("user3", map[string]interface{}{"name": "Charlie", "age": 45})
-tx.Delete("old_user")
-
-// Commit the transaction (all operations execute atomically)
-if err := tx.Commit(); err != nil {
-    fmt.Println("Transaction failed:", err)
-} else {
-    fmt.Println("Transaction committed successfully")
-}
 ```
 
 ## Performance
 
-The database is designed for high-throughput environments. In the included benchmark with 8 reader threads and 4 writer threads performing concurrent operations:
-
-```
-Running concurrent performance test...
-Completed 120000 operations in 124.61725ms
-Performance: 962949 operations/second
-```
+The database is optimized for high concurrency with lock-free algorithms, supporting thousands of operations per second even with multiple concurrent readers and writers.
 
 ## Thread Safety
 
