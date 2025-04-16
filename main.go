@@ -77,25 +77,42 @@ func main() {
 	peopleCollection, err := dbInstance.CreateCollection("people")
 	if err != nil {
 		fmt.Printf("Error creating collection: %v\n", err)
-		// Don't return, collection might already exist and be recovered from WAL
+			// Collection might already exist and be recovered from WAL
+		// Try to get the existing collection
+		existingCollections := dbInstance.ListCollections()
+		for _, colName := range existingCollections {
+			if colName == "people" {
+				peopleCollection, _ = dbInstance.GetCollection("people")
+				fmt.Println("Using existing 'people' collection")
+				break
+			}
+		}
+		
+		// If we still don't have a collection, we can't proceed
+		if peopleCollection == nil {
+			fmt.Println("Failed to create or retrieve 'people' collection, cannot proceed")
+			return
+		}
 	}
-
+	
 	collections["people"] = peopleCollection
 	indexes["people"] = make(map[string]*database.Index)
 
-	// Create indexes for efficient querying
-	nameIndex, err := createNameIndex(peopleCollection)
-	if err == nil {
-		indexes["people"]["name"] = nameIndex
-	}
+	// Create indexes for efficient querying only if we have a valid collection
+	if peopleCollection != nil {
+		nameIndex, err := createNameIndex(peopleCollection)
+		if err == nil {
+			indexes["people"]["name"] = nameIndex
+		}
 
-	ageIndex, err := createAgeIndex(peopleCollection)
-	if err == nil {
-		indexes["people"]["age"] = ageIndex
-	}
+		ageIndex, err := createAgeIndex(peopleCollection)
+		if err == nil {
+			indexes["people"]["age"] = ageIndex
+		}
 
-	// Add some sample data
-	addSamplePeople(peopleCollection)
+		// Add some sample data
+		addSamplePeople(peopleCollection)
+	}
 
 	// Set up improved HTTP API
 	setupHTTPAPI()
@@ -341,7 +358,7 @@ func handleCollection(w http.ResponseWriter, r *http.Request, collectionName str
 	w.Header().Set("Content-Type", "application/json")
 
 	// Check if collection exists
-	collection, exists := collections[collectionName]
+	_, exists := collections[collectionName]
 	if !exists {
 		sendErrorResponse(w, "Collection not found", http.StatusNotFound)
 		return
@@ -505,9 +522,12 @@ func handleCollectionItem(w http.ResponseWriter, r *http.Request, collectionName
 		return
 	}
 
-	// Try to convert the ID to an integer (our primary use case)
-	itemID, err := strconv.Atoi(itemIDStr)
-	if err != nil {
+	// Convert ID to appropriate type for database lookup
+	var itemID interface{}
+	if intID, err := strconv.Atoi(itemIDStr); err == nil {
+		// If it's an integer, use the int value
+		itemID = intID
+	} else {
 		// If not an integer, use the string as is (allows string keys too)
 		itemID = itemIDStr
 	}
