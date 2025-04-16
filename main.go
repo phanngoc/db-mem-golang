@@ -77,7 +77,7 @@ func main() {
 	peopleCollection, err := dbInstance.CreateCollection("people")
 	if err != nil {
 		fmt.Printf("Error creating collection: %v\n", err)
-			// Collection might already exist and be recovered from WAL
+		// Collection might already exist and be recovered from WAL
 		// Try to get the existing collection
 		existingCollections := dbInstance.ListCollections()
 		for _, colName := range existingCollections {
@@ -87,14 +87,14 @@ func main() {
 				break
 			}
 		}
-		
+
 		// If we still don't have a collection, we can't proceed
 		if peopleCollection == nil {
 			fmt.Println("Failed to create or retrieve 'people' collection, cannot proceed")
 			return
 		}
 	}
-	
+
 	collections["people"] = peopleCollection
 	indexes["people"] = make(map[string]*database.Index)
 
